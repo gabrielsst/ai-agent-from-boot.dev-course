@@ -1,8 +1,10 @@
 import os
+import argparse
+import json
 from dotenv import load_dotenv
 from openai import OpenAI
-import argparse
 from prompts import system_prompt
+from call_function import available_functions, call_function
 
 load_dotenv()
 api_key = os.environ.get("OPENROUTER_API_KEY")
@@ -21,15 +23,14 @@ parser.add_argument("--verbose", action="store_true", help="Enable verbose outpu
 args = parser.parse_args()
 
 messages = [
-    {
-        "role": "user",
-        "content": args.user_prompt,
-    }
+    {"role": "system", "content": system_prompt},
+    {"role": "user", "content": args.user_prompt},
 ]
 
 response = client.chat.completions.create(
     model="openrouter/free",
     messages=messages,
+    tools=available_functions,
 )
 
 usage = response.usage
@@ -37,10 +38,22 @@ usage = response.usage
 if usage == None:
     raise RuntimeError("There is no usage")
 
-if args.verbose:
+verbose_flag = args.verbose
+
+if verbose_flag:
     print(f"User prompt: {args.user_prompt}")
     print(f"Prompt tokens: {usage.prompt_tokens}")
     print(f"Response tokens: {usage.completion_tokens}")
 
-print(f"Response:\n{response.choices[0].message.content}")
+message = response.choices[0].message
 
+result_message = {}
+if message.tool_calls:
+   for function_call_part in message.tool_calls:
+      result_message = call_function(function_call_part, verbose_flag)
+
+if not result_message["content"]:
+   raise Exception("Error: no content on the message")
+
+if verbose_flag:
+   print(f"-> {result_message['content']}")
