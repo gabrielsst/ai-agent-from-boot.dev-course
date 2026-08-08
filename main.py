@@ -1,6 +1,7 @@
 import os
 import argparse
 import json
+import sys
 from dotenv import load_dotenv
 from openai import OpenAI
 from prompts import system_prompt
@@ -10,7 +11,7 @@ load_dotenv()
 api_key = os.environ.get("OPENROUTER_API_KEY")
 
 if api_key == None:
-  raise RuntimeError("environment variable wasn't found")
+    raise RuntimeError("environment variable wasn't found")
 
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
@@ -19,7 +20,8 @@ client = OpenAI(
 
 parser = argparse.ArgumentParser(description="Chatbot")
 parser.add_argument("user_prompt", type=str, help="User prompt")
-parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
+parser.add_argument("--verbose", action="store_true",
+                    help="Enable verbose output")
 args = parser.parse_args()
 
 messages = [
@@ -27,33 +29,48 @@ messages = [
     {"role": "user", "content": args.user_prompt},
 ]
 
-response = client.chat.completions.create(
-    model="openrouter/free",
-    messages=messages,
-    tools=available_functions,
-)
+max_iters = 20
+success = False
 
-usage = response.usage
+for _ in range(max_iters):
 
-if usage == None:
-    raise RuntimeError("There is no usage")
+    response = client.chat.completions.create(
+        model="openrouter/free",
+        messages=messages,
+        tools=available_functions,
+    )
 
-verbose_flag = args.verbose
+    usage = response.usage
 
-if verbose_flag:
-    print(f"User prompt: {args.user_prompt}")
-    print(f"Prompt tokens: {usage.prompt_tokens}")
-    print(f"Response tokens: {usage.completion_tokens}")
+    if usage == None:
+        raise RuntimeError("There is no usage")
 
-message = response.choices[0].message
+    verbose_flag = args.verbose
 
-result_message = {}
-if message.tool_calls:
-   for function_call_part in message.tool_calls:
-      result_message = call_function(function_call_part, verbose_flag)
+    if verbose_flag:
+        print(f"User prompt: {args.user_prompt}")
+        print(f"Prompt tokens: {usage.prompt_tokens}")
+        print(f"Response tokens: {usage.completion_tokens}")
 
-if not result_message["content"]:
-   raise Exception("Error: no content on the message")
+    message = response.choices[0].message
+    messages.append(message)
 
-if verbose_flag:
-   print(f"-> {result_message['content']}")
+    result_message = {}
+    if message.tool_calls:
+        for function_call_part in message.tool_calls:
+            result_message = call_function(function_call_part, verbose_flag)
+            messages.append(result_message)
+
+            if not result_message.get("content"):
+                print("Error: no content on the message")
+
+            if verbose_flag:
+                print(f"-> {result_message['content']}")
+    else:
+        success = True
+        print("Final response:")
+        print(message.content)
+        break
+
+if not success:
+    sys.exit(1)

@@ -14,6 +14,7 @@ available_functions: list = [
 
 working_directory = "./calculator"
 
+
 def call_function(tool_call, verbose: bool = False) -> dict:
     function_name = tool_call.function.name
     function_args = json.loads(tool_call.function.arguments or "{}")
@@ -39,8 +40,8 @@ def call_function(tool_call, verbose: bool = False) -> dict:
 
     result = ""
     if function_name in function_map:
-      function_args["working_directory"] = working_directory
-      result = function_map[function_name](**function_args)
+        function_args["working_directory"] = working_directory
+        result = function_map[function_name](**function_args)
 
     return {
         "role": "tool",
